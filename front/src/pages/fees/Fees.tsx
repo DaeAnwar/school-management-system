@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import FeeTable from './FeeTable';
-import React from 'react';
 
 interface StudentInfo {
   _id: string;

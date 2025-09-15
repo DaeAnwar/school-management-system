@@ -23,7 +23,7 @@ const formatCurrency = (amount: number) =>
     minimumFractionDigits: 0,
   }).format(amount);
 
-const FeeMonthBlock: React.FC<FeeMonthBlockProps> = ({ studentId, month, items, onSave }) => {
+const FeeMonthBlock: React.FC<FeeMonthBlockProps> = ({  month, items, onSave }) => {
   const [localItems, setLocalItems] = useState<FeeItem[]>([]);
 
   useEffect(() => {

@@ -20,7 +20,10 @@ const app = express();
 app.use(express.json());
 
 // Enable CORS
-app.use(cors());
+app.use(cors({
+  origin: ['https://YOUR-APP.vercel.app'],
+  credentials: true
+}));
 
 // Set static folder for uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -40,12 +43,12 @@ app.use('/api/enrollments', require('./routes/enrollments'));
 app.use(errorHandler);
 
 // Serve frontend in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../client/dist')));
-  app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, '../client/dist', 'index.html'));
-  });
-}
+//if (process.env.NODE_ENV === 'production') {
+//  app.use(express.static(path.join(__dirname, '../client/dist')));
+//  app.get('*', (req, res) => {
+//    res.sendFile(path.resolve(__dirname, '../client/dist', 'index.html'));
+//  });
+//}
 
 const PORT = process.env.PORT || 5000;
 

@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import axios from 'axios';
-import api from '../utils/api';
+import api from '../utils/api'; // ✅ use the shared axios client (points to Render)
 
 interface User {
   _id: string;
@@ -30,18 +29,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const loadUser = async () => {
       if (token) {
         try {
-          // Set token to axios header
+          // Set token header for our shared client
           api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          
-          // Get user data
+
+          // ✅ always include /api prefix
           const res = await api.get('/api/auth/me');
-          setUser(res.data.data);
-          setIsAuthenticated(true);
-        } catch (err) {
-          // Token is invalid or expired
+          // handle payload shape { data: { ...user } } or { user: ... }
+          const u = res.data?.data ?? res.data?.user ?? null;
+          setUser(u);
+          setIsAuthenticated(Boolean(u));
+        } catch {
+          // Token invalid/expired
           localStorage.removeItem('token');
           setToken(null);
           delete api.defaults.headers.common['Authorization'];
+          setIsAuthenticated(false);
+          setUser(null);
         }
       }
       setLoading(false);
@@ -52,28 +55,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Login user
   const login = async (email: string, password: string) => {
-    try {
-      const res = await axios.post('/api/auth/login', {
-        email,
-        password
-      });
+    // ❗ Use the shared client + /api path (NOT axios.post('/api/...'))
+    const res = await api.post('/api/auth/login', { email, password });
 
-      if (res.data.success) {
-        localStorage.setItem('token', res.data.token);
-        setToken(res.data.token);
-        setIsAuthenticated(true);
-        
-        // Set token to axios header
-        api.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
-        
-        // Get user data
-        const userRes = await api.get('/api/auth/me');
-        setUser(userRes.data.data);
+    // accept either { success, token, user } or { token, user }
+    const ok = res.data?.success ?? true;
+    if (ok) {
+      const jwt = res.data?.token;
+      if (jwt) {
+        localStorage.setItem('token', jwt);
+        setToken(jwt);
+        api.defaults.headers.common['Authorization'] = `Bearer ${jwt}`;
       }
-    } catch (err) {
-      console.error('Login error:', err);
-      throw err;
+
+      // fetch current user (if not already returned)
+      const u =
+        res.data?.user ??
+        (await api.get('/api/auth/me')).data?.data ??
+        null;
+
+      setUser(u);
+      setIsAuthenticated(Boolean(u));
+      return;
     }
+
+    // if backend sends an error shape
+    throw new Error(res.data?.error || 'Login failed');
   };
 
   // Logout user
@@ -87,25 +94,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AuthContext.Provider
-      value={{
-        user,
-        token,
-        isAuthenticated,
-        loading,
-        login,
-        logout
-      }}
+      value={{ user, token, isAuthenticated, loading, login, logout }}
     >
       {children}
     </AuthContext.Provider>
   );
 };
 
-// Custom hook to use auth context
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
+  return ctx;
 };

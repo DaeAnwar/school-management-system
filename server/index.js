@@ -21,7 +21,7 @@ app.use(express.json());
 
 // Enable CORS
 app.use(cors({
-  origin: ['https://school-management-system-eta-gold.vercel.app/'],
+  origin: 'https://school-management-system-eta-gold.vercel.app', // no trailing slash
   credentials: true
 }));
 

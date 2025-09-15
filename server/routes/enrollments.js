@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getStudentEnrollment } = require('../controllers/enrollments');
+const { getStudentEnrollment } = require('../controllers/enrollmentController');
 
 const {
   getEnrollments,

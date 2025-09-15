@@ -1,3 +1,4 @@
+// server/index.js
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
@@ -7,28 +8,27 @@ const errorHandler = require('./middleware/error');
 const cron = require('node-cron');
 const seedFeesForMonth = require('./utils/seedMonthlyFees');
 
-// Load environment variables
 dotenv.config();
-
-// Connect to database
 connectDB();
 
-// Initialize express
 const app = express();
 
 // Body parser
 app.use(express.json());
 
-// Enable CORS
+// CORS: Vercel + local dev
 app.use(cors({
-  origin: 'https://school-management-system-eta-gold.vercel.app', // no trailing slash
+  origin: [
+  'https://school-management-system-eta-gold.vercel.app',
+  'http://localhost:5173'
+],
   credentials: true
 }));
 
-// Set static folder for uploads
+// Static uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// API Routes
+// API routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/students', require('./routes/students'));
 app.use('/api/classes', require('./routes/classes'));
@@ -39,39 +39,29 @@ app.use('/api/stats', require('./routes/stats'));
 app.use('/api/uploads', require('./routes/uploads'));
 app.use('/api/enrollments', require('./routes/enrollments'));
 
-// Error handler middleware
-app.use(errorHandler);
+// Simple health check
+app.get('/health', (_, res) => res.send('ok'));
 
-// Serve frontend in production
-//if (process.env.NODE_ENV === 'production') {
-//  app.use(express.static(path.join(__dirname, '../client/dist')));
-//  app.get('*', (req, res) => {
-//    res.sendFile(path.resolve(__dirname, '../client/dist', 'index.html'));
-//  });
-//}
+// Errors
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-// ✅ Start server & assign to variable
 const server = app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  
- cron.schedule('0 0 1 * *', async () => {
-  const today = new Date();
-  const month = today.getMonth() + 1;
-
-  console.log(`🕐 Running monthly fee seeder for month ${month}`);
-  try {
-    await seedFeesForMonth(month, today); // ← pass full date
-    console.log(`✅ Monthly fees generated.`);
-  } catch (err) {
-    console.error('❌ Failed to seed monthly fees:', err.message);
-  }
-});
+  cron.schedule('0 0 1 * *', async () => {
+    const today = new Date();
+    const month = today.getMonth() + 1;
+    try {
+      await seedFeesForMonth(month, today);
+      console.log('✅ Monthly fees generated.');
+    } catch (err) {
+      console.error('❌ Failed to seed monthly fees:', err.message);
+    }
+  });
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err, promise) => {
+process.on('unhandledRejection', (err) => {
   console.log(`Error: ${err.message}`);
   server.close(() => process.exit(1));
 });

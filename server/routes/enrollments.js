@@ -9,6 +9,6 @@ const {
 
 router.get('/', getEnrollments);
 router.post('/', upsertEnrollment);
-router.get('/single', protect, getStudentEnrollment); // GET /api/enrollments/single
+router.get('/single', getStudentEnrollment); // GET /api/enrollments/single
 
 module.exports = router;

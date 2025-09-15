@@ -2,13 +2,12 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL + "/api", // ✅ use backend URL from env
+  baseURL: import.meta.env.VITE_API_URL + "/api", // 👈 Always point to backend
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// Add a request interceptor to set the auth token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
@@ -20,7 +19,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Add a response interceptor to handle token expiration
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -31,6 +29,5 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-console.log("🔗 Using API Base URL:", import.meta.env.VITE_API_URL);
 
 export default api;

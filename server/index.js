@@ -16,8 +16,6 @@ const app = express();
 // Body parser
 app.use(express.json());
 
-// CORS: Vercel + local dev
-const cors = require("cors");
 
 // Allow prod, all preview deployments for this project, and local dev
 const allowed = [

@@ -17,13 +17,39 @@ const app = express();
 app.use(express.json());
 
 // CORS: Vercel + local dev
-app.use(cors({
-  origin: [
-  'https://school-management-system-eta-gold.vercel.app',
-  'http://localhost:5173'
-],
-  credentials: true
-}));
+const cors = require("cors");
+
+// Allow prod, all preview deployments for this project, and local dev
+const allowed = [
+  "https://school-management-system-eta-gold.vercel.app", // prod
+  "http://localhost:5173",                                // dev
+];
+
+const vercelPreviewRegex = /^https:\/\/school-management-system-[a-z0-9-]+\.vercel\.app$/;
+// if your project name or team namespace differs, adapt the regex accordingly.
+// Examples that will match:
+//   https://school-management-system-abc123.vercel.app
+//   https://school-management-system-git-main-<team>.vercel.app
+//   https://school-management-system-<hash>-<team>.vercel.app
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true); // curl/postman
+      if (allowed.includes(origin) || vercelPreviewRegex.test(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+// (Optional, but safe) respond to preflight explicitly
+app.options("*", cors());
+
 
 // Static uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

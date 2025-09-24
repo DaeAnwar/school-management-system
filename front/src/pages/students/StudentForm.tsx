@@ -43,8 +43,8 @@ const StudentForm = () => {
   });
 
   // Options for dropdowns
-  const [classes, setClasses] = useState<Class[]>([]);
-  const [clubs, setClubs] = useState<Club[]>([]);
+  const [_classes, setClasses] = useState<Class[]>([]);
+  const [_clubs, setClubs] = useState<Club[]>([]);
   
   // File upload
   const [selectedFile, setSelectedFile] = useState<File | null>(null);

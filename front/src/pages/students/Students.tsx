@@ -52,8 +52,8 @@ interface Club {
 const Students = () => {
 
   const [students, setStudents] = useState<Student[]>([]);
- // const [classes, setClasses] = useState<Class[]>([]);
-  //const [clubs, setClubs] = useState<Club[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [clubs, setClubs] = useState<Club[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');

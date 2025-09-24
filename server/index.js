@@ -7,33 +7,26 @@ const connectDB = require('./config/db');
 const errorHandler = require('./middleware/error');
 const cron = require('node-cron');
 const seedFeesForMonth = require('./utils/seedMonthlyFees');
+const SchoolYear = require('./models/SchoolYear'); // ✅ Add this
 
 dotenv.config();
-connectDB();
 
 const app = express();
 
 // Body parser
 app.use(express.json());
 
-
-// Allow prod, all preview deployments for this project, and local dev
+// Allowed origins
 const allowed = [
-  "https://school-management-system-eta-gold.vercel.app", // prod
-  "http://localhost:5173",                                // dev
+  "https://school-management-system-eta-gold.vercel.app",
+  "http://localhost:5173"
 ];
-
 const vercelPreviewRegex = /^https:\/\/school-management-system-[a-z0-9-]+\.vercel\.app$/;
-// if your project name or team namespace differs, adapt the regex accordingly.
-// Examples that will match:
-//   https://school-management-system-abc123.vercel.app
-//   https://school-management-system-git-main-<team>.vercel.app
-//   https://school-management-system-<hash>-<team>.vercel.app
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true); // curl/postman
+      if (!origin) return callback(null, true);
       if (allowed.includes(origin) || vercelPreviewRegex.test(origin)) {
         return callback(null, true);
       }
@@ -41,13 +34,11 @@ app.use(
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
 
-// (Optional, but safe) respond to preflight explicitly
 app.options("*", cors());
-
 
 // Static uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -62,17 +53,40 @@ app.use('/api/fees', require('./routes/fees'));
 app.use('/api/stats', require('./routes/stats'));
 app.use('/api/uploads', require('./routes/uploads'));
 app.use('/api/enrollments', require('./routes/enrollments'));
+app.use('/api/school-years', require('./routes/schoolYears'));
 
-// Simple health check
+// Health check
 app.get('/health', (_, res) => res.send('ok'));
 
-// Errors
+// Error handler
 app.use(errorHandler);
 
+// ✅ Auto-create school year if none exist
+const ensureDefaultYear = async () => {
+  const existing = await SchoolYear.find();
+  if (existing.length === 0) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const defaultYear = now.getMonth() + 1 >= 9
+      ? `${year}-${year + 1}`
+      : `${year - 1}-${year}`;
+
+    await SchoolYear.create({ year: defaultYear, isCurrent: true });
+    console.log(`✅ Created default school year: ${defaultYear}`);
+  }
+};
+
+// Connect DB, run logic, then start server
 const PORT = process.env.PORT || 5000;
 
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+connectDB().then(async () => {
+  await ensureDefaultYear(); // ✅ Call it here
+
+  const server = app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+
+  // Monthly fees cron job
   cron.schedule('0 0 1 * *', async () => {
     const today = new Date();
     const month = today.getMonth() + 1;
@@ -83,9 +97,10 @@ const server = app.listen(PORT, () => {
       console.error('❌ Failed to seed monthly fees:', err.message);
     }
   });
-});
 
-process.on('unhandledRejection', (err) => {
-  console.log(`Error: ${err.message}`);
-  server.close(() => process.exit(1));
+  // Graceful shutdown
+  process.on('unhandledRejection', (err) => {
+    console.log(`Error: ${err.message}`);
+    server.close(() => process.exit(1));
+  });
 });

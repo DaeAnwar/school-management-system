@@ -1,118 +1,145 @@
+// controllers/students.js
 const Student = require('../models/Student');
-const ErrorResponse = require('../utils/errorResponse');
+const Enrollment = require('../models/Enrollment');
 const Fee = require('../models/Fee');
-const Enrollment = require('../models/Enrollment'); // ⬅️ add this line
+const ErrorResponse = require('../utils/errorResponse');
+const { getCurrentSchoolYear } = require('../utils/dateUtils');
 
-const { getCurrentSchoolYear } = require('../utils/dateUtils'); // we'll add this next
-// @desc    Get all students
+// @desc    Get all students with enrollment info
 // @route   GET /api/students
 // @access  Private
 exports.getStudents = async (req, res, next) => {
   try {
-    // Copy req.query
-    const reqQuery = { ...req.query };
-const schoolYear = req.query.schoolYear;
+    const {
+      schoolYear,
+      class: classId,
+      club: clubId,
+      transport,
+      search,
+      select,
+      sort,
+      page: pageStr,
+      limit: limitStr
+    } = req.query;
 
-    // Fields to exclude
-    const removeFields = ['select', 'sort', 'page', 'limit', 'search'];
-
-    // Loop over removeFields and delete them from reqQuery
-    removeFields.forEach(param => delete reqQuery[param]);
-
-    // Handle search
-    if (req.query.search) {
-      const searchTerm = req.query.search;
-      reqQuery.$or = [
-        { firstName: { $regex: searchTerm, $options: 'i' } },
-        { lastName: { $regex: searchTerm, $options: 'i' } },
-        { studentId: { $regex: searchTerm, $options: 'i' } }
+    const studentFilter = {};
+    if (search) {
+      const rx = new RegExp(search, 'i');
+      studentFilter.$or = [
+        { firstName: rx },
+        { lastName: rx },
+        { studentId: rx }
       ];
     }
 
-    // Create query string
-    let queryStr = JSON.stringify(reqQuery);
+    // ---------- Case A: no schoolYear ----------
+    if (!schoolYear) {
+      let q = Student.find(studentFilter).populate({
+        path: 'enrollments',
+        populate: [
+          { path: 'class', select: 'name' },
+          { path: 'clubs', select: 'name' }
+        ]
+      });
 
-    // Create operators ($gt, $gte, etc)
-    queryStr = queryStr.replace(/\b(gt|gte|lt|lte|in)\b/g, match => `$${match}`);
+      if (select) q = q.select(select.split(',').join(' '));
+      q = sort ? q.sort(sort.split(',').join(' ')) : q.sort('-createdAt');
 
-    // Finding resource
-   let query = Student.find(JSON.parse(queryStr))
-  .populate({
-    path: 'enrollments',
-    match: schoolYear ? { schoolYear } : {}, // ✅ match specific year
-    populate: [
-      { path: 'class', select: 'name' },
-      { path: 'clubs', select: 'name' }
-    ]
-  });
-    // Select Fields
-    if (req.query.select) {
-      const fields = req.query.select.split(',').join(' ');
-      query = query.select(fields);
+      const page = parseInt(pageStr, 10) || 1;
+      const limit = parseInt(limitStr, 10) || 15;
+      const skip = (page - 1) * limit;
+
+      const total = await Student.countDocuments(studentFilter);
+      const students = await q.skip(skip).limit(limit).lean();
+
+      const enriched = students.map(s => {
+        const enr = s.enrollments?.[0];
+        return {
+          ...s,
+          class: enr?.class || null,
+          hasTransport: enr?.hasTransport || false,
+          clubs: enr?.clubs || [],
+          enrolled: !!enr
+        };
+      });
+
+      return res.status(200).json({
+        success: true,
+        count: enriched.length,
+        total,
+        pagination: {
+          next: skip + enriched.length < total ? { page: page + 1, limit } : undefined,
+          prev: skip > 0 ? { page: page - 1, limit } : undefined
+        },
+        data: enriched
+      });
     }
 
-    // Sort
-    if (req.query.sort) {
-      const sortBy = req.query.sort.split(',').join(' ');
-      query = query.sort(sortBy);
-    } else {
-      query = query.sort('-createdAt');
-    }
+// ---------- Case B: with schoolYear ----------
+const enrollmentFilter = { schoolYear };
+if (clubId && clubId !== 'all') enrollmentFilter.clubs = clubId;
+if (transport === 'yes') enrollmentFilter.hasTransport = true;
+if (transport === 'no') enrollmentFilter.hasTransport = false;
 
-   // ✅ STEP: Filter by schoolYear if provided
-if (schoolYear) {
-  const paidFees = await Fee.find({
-    schoolYear,
-    month: 9,
-    items: {
-      $elemMatch: {
-        type: 'inscription',
-        paid: { $gt: 0 }
-      }
-    }
-  }).select('student');
+// Fetch enrollments only for this year
+const enrollments = await Enrollment.find(enrollmentFilter)
+  .populate('class', 'name')
+  .populate('clubs', 'name')
+  .lean();
 
-  const eligibleStudentIds = paidFees.map(fee => fee.student.toString());
+const byStudent = new Map(enrollments.map(e => [e.student.toString(), e]));
 
-  query = query.where('_id').in(eligibleStudentIds);
+let students = [];
+let total = 0;
+
+const page = parseInt(pageStr, 10) || 1;
+const limit = parseInt(limitStr, 10) || 15;
+const skip = (page - 1) * limit;
+
+if (classId && classId !== 'all') {
+  // Students enrolled in this class in this year
+  const classEnrollments = enrollments.filter(e => e.class?._id?.toString() === classId);
+  const enrolledIds = classEnrollments.map(e => e.student.toString());
+
+  students = await Student.find({ ...studentFilter, _id: { $in: enrolledIds } })
+    .sort(sort ? sort.split(',').join(' ') : '-createdAt')
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  total = await Student.countDocuments({ ...studentFilter, _id: { $in: enrolledIds } });
+} else {
+  // All Classes → show ALL students, but only mark as enrolled if they have enrollment this year
+  students = await Student.find(studentFilter)
+    .sort(sort ? sort.split(',').join(' ') : '-createdAt')
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  total = await Student.countDocuments(studentFilter);
 }
 
-// ✅ Pagination (MUST go after filtering)
-const page = parseInt(req.query.page, 10) || 1;
-const limit = parseInt(req.query.limit, 10) || 15;
-const startIndex = (page - 1) * limit;
-const endIndex = page * limit;
-const total = await query.clone().countDocuments();
+// Merge enrollment info (only for this year)
+const enriched = students.map(s => {
+  const enr = byStudent.get(s._id.toString()); // enrollment for this year only
+  return {
+    ...s,
+    class: enr?.class || null,
+    hasTransport: enr?.hasTransport || false,
+    clubs: enr?.clubs || [],
+    enrolled: !!enr // ✅ no carry over: only true if enrollment exists for this year
+  };
+});
 
-query = query.skip(startIndex).limit(limit);
+return res.status(200).json({
+  success: true,
+  count: enriched.length,
+  total,
+  data: enriched
+});
 
-    // Execute query
-    const students = await query;
 
-    // Pagination result
-    const pagination = {};
 
-    if (endIndex < total) {
-      pagination.next = {
-        page: page + 1,
-        limit
-      };
-    }
-
-    if (startIndex > 0) {
-      pagination.prev = {
-        page: page - 1,
-        limit
-      };
-    }
-
-    res.status(200).json({
-      success: true,
-      count: students.length,
-      pagination,
-      data: students,
-      total
-    });
   } catch (err) {
     next(err);
   }
@@ -123,32 +150,30 @@ query = query.skip(startIndex).limit(limit);
 // @access  Private
 exports.getStudent = async (req, res, next) => {
   try {
+    console.log("📥 Fetching student:", req.params.id);
+
     const student = await Student.findById(req.params.id)
-  .populate({
-    path: 'enrollments',
-    populate: [
-      { path: 'class', select: 'name' },
-      { path: 'clubs', select: 'name' }
-    ]
-  })
-  .populate({
-    path: 'fees',
-    populate: {
-      path: 'feeType'
-    }
-  });
+      .populate({
+        path: 'enrollments',
+        populate: [
+          { path: 'class', select: 'name' },
+          { path: 'clubs', select: 'name' }
+        ]
+      })
+      .populate({
+        path: 'fees',
+        populate: { path: 'feeType', select: 'name amount' }
+      });
 
     if (!student) {
-      return next(
-        new ErrorResponse(`Student not found with id of ${req.params.id}`, 404)
-      );
+      console.log("❌ Student not found");
+      return next(new ErrorResponse(`Student not found with id of ${req.params.id}`, 404));
     }
 
-    res.status(200).json({
-      success: true,
-      data: student
-    });
+    console.log("✅ Student found:", student._id);
+    res.status(200).json({ success: true, data: student });
   } catch (err) {
+    console.error("🔥 getStudent error:", err);
     next(err);
   }
 };
@@ -160,47 +185,29 @@ exports.createStudent = async (req, res, next) => {
   try {
     const student = await Student.create(req.body);
 
-    // Create initial fees for this student
+    // create empty fees for current school year
     const today = new Date();
     const currentMonth = today.getMonth() + 1;
     const schoolYear = getCurrentSchoolYear(today);
 
-    // Generate school months (Sep to current month if in school year)
-    const months =
-      currentMonth >= 9
-        ? Array.from({ length: currentMonth - 8 }, (_, i) => i + 9) // Sep to current
-        : Array.from({ length: currentMonth + 4 }, (_, i) => i + 1); // Jan to current
-
-    const baseTypes = ['tuition', 'transport', 'club'];
+    const months = currentMonth >= 9
+      ? Array.from({ length: currentMonth - 8 }, (_, i) => i + 9)
+      : Array.from({ length: currentMonth + 4 }, (_, i) => i + 1);
 
     for (const month of months) {
-      const types = [...baseTypes];
-      if (month === 9) types.push('inscription');
-
-      const items = types.map(type => ({
-        type,
-        due: 0,
-        paid: 0,
-        date: new Date()
-      }));
-
       await Fee.create({
         student: student._id,
         schoolYear,
         month,
-        items
+        items: [{ type: 'tuition', due: 0, paid: 0 }]
       });
     }
 
-    res.status(201).json({
-      success: true,
-      data: student
-    });
+    res.status(201).json({ success: true, data: student });
   } catch (err) {
     next(err);
   }
 };
-
 
 // @desc    Update student
 // @route   PUT /api/students/:id
@@ -213,15 +220,10 @@ exports.updateStudent = async (req, res, next) => {
     });
 
     if (!student) {
-      return next(
-        new ErrorResponse(`Student not found with id of ${req.params.id}`, 404)
-      );
+      return next(new ErrorResponse(`Student not found with id of ${req.params.id}`, 404));
     }
 
-    res.status(200).json({
-      success: true,
-      data: student
-    });
+    res.status(200).json({ success: true, data: student });
   } catch (err) {
     next(err);
   }
@@ -235,17 +237,12 @@ exports.deleteStudent = async (req, res, next) => {
     const student = await Student.findById(req.params.id);
 
     if (!student) {
-      return next(
-        new ErrorResponse(`Student not found with id of ${req.params.id}`, 404)
-      );
+      return next(new ErrorResponse(`Student not found with id of ${req.params.id}`, 404));
     }
 
     await student.deleteOne();
 
-    res.status(200).json({
-      success: true,
-      data: {}
-    });
+    res.status(200).json({ success: true, data: {} });
   } catch (err) {
     next(err);
   }

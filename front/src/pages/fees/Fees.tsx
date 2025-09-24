@@ -7,7 +7,7 @@ interface StudentInfo {
   firstName: string;
   lastName: string;
   fullName: string;
-  class: string;
+  class: string | { _id: string; name: string }; // ✅ allow both string or populated object
   profilePhoto: string;
   studentId: string;
 }
@@ -22,17 +22,18 @@ interface FeeEntry {
 
 const Fees = () => {
   const getCurrentSchoolYear = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  return month >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
-};
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    return month >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+  };
+
   const [feeData, setFeeData] = useState<FeeEntry[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [schoolYears, setSchoolYears] = useState<string[]>([]);
 
   const [filters, setFilters] = useState({
-schoolYear: getCurrentSchoolYear(),
+    schoolYear: getCurrentSchoolYear(),
     month: '',
     status: '',
     class: '',
@@ -68,13 +69,16 @@ schoolYear: getCurrentSchoolYear(),
     const name = `${entry.student.firstName} ${entry.student.lastName}`.toLowerCase();
     const searchMatch = name.includes(filters.search.toLowerCase());
 
+    const className =
+      typeof entry.student.class === 'string'
+        ? entry.student.class
+        : entry.student.class?.name || '';
+
     const classMatch = filters.class
-      ? entry.student.class?.toLowerCase() === filters.class.toLowerCase()
+      ? className.toLowerCase() === filters.class.toLowerCase()
       : true;
 
-    const statusMatch = filters.status
-      ? entry.status === filters.status
-      : true;
+    const statusMatch = filters.status ? entry.status === filters.status : true;
 
     return searchMatch && classMatch && statusMatch;
   });
@@ -93,6 +97,7 @@ schoolYear: getCurrentSchoolYear(),
             <option key={year} value={year}>{year}</option>
           ))}
         </select>
+
         <select
           value={filters.month}
           onChange={e => setFilters({ ...filters, month: e.target.value })}
@@ -137,47 +142,59 @@ schoolYear: getCurrentSchoolYear(),
           </tr>
         </thead>
         <tbody>
-          {filteredStudents.map((entry: FeeEntry) => (
-  <tr key={entry.student._id}>
-    <td colSpan={4} className="py-4">
-      <div className="border rounded-lg shadow-sm p-4 bg-white">
-        <div
-          onClick={() => setExpanded(expanded === entry.student._id ? null : entry.student._id)}
-          className="cursor-pointer hover:bg-gray-50 transition-all"
-        >
-          <div className="flex justify-between items-center mb-2">
-            <div className="font-semibold text-base">
-              {entry.student.firstName} {entry.student.lastName}
-            </div>
-            <div className="text-sm text-gray-500">
-              Class: {entry.student.class}
-            </div>
-          </div>
-          <div className="flex justify-between text-sm text-gray-700">
-            <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-              entry.status === 'paid'
-                ? 'bg-green-100 text-green-800'
-                : entry.status === 'partial'
-                ? 'bg-yellow-100 text-yellow-800'
-                : 'bg-red-100 text-red-800'
-            }`}>
-              {entry.status.toUpperCase()}
-            </span>
-            <span className="font-semibold">
-              TND {entry.totalPaid} / TND {entry.totalDue}
-            </span>
-          </div>
-        </div>
+          {filteredStudents.map((entry: FeeEntry) => {
+            const className =
+              typeof entry.student.class === 'string'
+                ? entry.student.class
+                : entry.student.class?.name || 'N/A';
 
-        {expanded === entry.student._id && (
-          <div className="mt-4">
-            <FeeTable studentId={entry.student._id} schoolYear={filters.schoolYear} />
-          </div>
-        )}
-      </div>
-    </td>
-  </tr>
-))}
+            return (
+              <tr key={entry.student._id}>
+                <td colSpan={4} className="py-4">
+                  <div className="border rounded-lg shadow-sm p-4 bg-white">
+                    <div
+                      onClick={() =>
+                        setExpanded(expanded === entry.student._id ? null : entry.student._id)
+                      }
+                      className="cursor-pointer hover:bg-gray-50 transition-all"
+                    >
+                      <div className="flex justify-between items-center mb-2">
+                        <div className="font-semibold text-base">
+                          {entry.student.firstName} {entry.student.lastName}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Class: {className}
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between text-sm text-gray-700">
+                        <span
+                          className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                            entry.status === 'paid'
+                              ? 'bg-green-100 text-green-800'
+                              : entry.status === 'partial'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {entry.status.toUpperCase()}
+                        </span>
+                        <span className="font-semibold">
+                          TND {entry.totalPaid} / TND {entry.totalDue}
+                        </span>
+                      </div>
+                    </div>
+
+                    {expanded === entry.student._id && (
+                      <div className="mt-4">
+                        <FeeTable studentId={entry.student._id} schoolYear={filters.schoolYear} />
+                      </div>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

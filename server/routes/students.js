@@ -9,13 +9,15 @@ const {
   deleteStudent
 } = require('../controllers/students');
 
+// List all students / Create student
 router.route('/')
-  .get(protect, getStudents)
-  .post(protect, createStudent);
+  .get(protect, getStudents)      // ✅ uses getStudents controller
+  .post(protect, createStudent);  // ✅ uses createStudent controller
 
+// Get one / Update / Delete
 router.route('/:id')
-  .get(protect, getStudent)
-  .put(protect, updateStudent)
-  .delete(protect, deleteStudent);
+  .get(protect, getStudent)       // ✅ uses getStudent controller
+  .put(protect, updateStudent)    // ✅ uses updateStudent controller
+  .delete(protect, deleteStudent);// ✅ uses deleteStudent controller
 
 module.exports = router;

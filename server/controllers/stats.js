@@ -1,68 +1,72 @@
+// controllers/stats.js
 const Student = require('../models/Student');
-const Class = require('../models/Class');
+const ClassModel = require('../models/Class');
 const Club = require('../models/Club');
+const Enrollment = require('../models/Enrollment');
 const Fee = require('../models/Fee');
+const { getCurrentSchoolYear } = require('../utils/dateUtils');
 
-// @desc    Get dashboard statistics
-// @route   GET /api/stats/dashboard
-// @access  Private
-exports.getDashboardStats = async (req, res, next) => {
+exports.getDashboardStats = async (req, res) => {
   try {
-    const date = new Date();
-    const currentMonth = date.getMonth() + 1;
-    const currentYear = date.getFullYear();
+    const schoolYear = req.query.schoolYear || getCurrentSchoolYear();
 
+    // 1. Total counts
     const totalStudents = await Student.countDocuments();
-    const totalClasses = await Class.countDocuments();
+    const totalClasses = await ClassModel.countDocuments();
     const totalClubs = await Club.countDocuments();
-    const transportUsers = await Student.countDocuments({ hasTransport: true });
 
-    // Fetch all fees for this month
-    const currentMonthFees = await Fee.find({ month: currentMonth, year: currentYear });
-
-    let paid = 0, partial = 0, unpaid = 0, totalPaidAmount = 0;
-
-    currentMonthFees.forEach(fee => {
-      const due = fee.totalDue;
-      const paidAmount = fee.totalPaid;
-      totalPaidAmount += paidAmount;
-
-      if (paidAmount >= due && due > 0) paid++;
-      else if (paidAmount > 0 && paidAmount < due) partial++;
-      else unpaid++;
+    // 2. Transport users in this school year
+    const transportUsers = await Enrollment.countDocuments({
+      schoolYear,
+      hasTransport: true,
     });
 
-    const monthlyData = Array(12).fill(0);
-    const yearlyFees = await Fee.find({ year: currentYear });
+    // 3. Fee status breakdown
+    const fees = await Fee.find({ schoolYear }).lean();
 
-    yearlyFees.forEach(fee => {
-      monthlyData[fee.month - 1] += fee.totalPaid;
+    let Paid = 0;
+    let Partial = 0;
+    let Unpaid = 0;
+    let totalPaid = 0;
+
+    for (let fee of fees) {
+      const due = fee.items.reduce((s, i) => s + (i.due || 0), 0);
+      const paid = fee.items.reduce((s, i) => s + (i.paid || 0), 0);
+
+      totalPaid += paid;
+
+      if (paid >= due && due > 0) Paid++;
+      else if (paid > 0 && paid < due) Partial++;
+      else Unpaid++;
+    }
+
+    // 4. Monthly collection
+    const monthlyCollection = Array(12).fill(0);
+    fees.forEach(fee => {
+      const paid = fee.items.reduce((s, i) => s + (i.paid || 0), 0);
+      if (fee.month >= 1 && fee.month <= 12) {
+        monthlyCollection[fee.month - 1] += paid;
+      }
     });
 
-    const feeBreakdown = [
-      { _id: 'Paid', count: paid },
-      { _id: 'Partial', count: partial },
-      { _id: 'Unpaid', count: unpaid }
-    ];
-
-    res.status(200).json({
+    res.json({
       success: true,
       data: {
         totalStudents,
         totalClasses,
         totalClubs,
         transportUsers,
-        feeStatus: {
-          Paid: paid,
-          Partial: partial,
-          Unpaid: unpaid,
-          totalPaid: totalPaidAmount
-        },
-        monthlyCollection: monthlyData,
-        feeBreakdown
-      }
+        feeStatus: { Paid, Partial, Unpaid, totalPaid },
+        monthlyCollection,
+        feeBreakdown: [
+          { _id: 'Paid', count: Paid },
+          { _id: 'Partial', count: Partial },
+          { _id: 'Unpaid', count: Unpaid },
+        ],
+      },
     });
   } catch (err) {
-    next(err);
+    console.error('❌ Dashboard stats failed:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 };

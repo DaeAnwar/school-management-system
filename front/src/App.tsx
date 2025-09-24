@@ -4,6 +4,7 @@ import { useAuth } from './contexts/AuthContext';
 // Layouts
 import DashboardLayout from './layouts/DashboardLayout';
 import AuthLayout from './layouts/AuthLayout';
+import EnrollmentForm from './pages/enrollments/EnrollmentForm';
 
 // Auth Pages
 import Login from './pages/auth/Login';
@@ -62,12 +63,16 @@ function App() {
 
       {/* Dashboard Routes */}
       <Route
+      
         path="/"
         element={
+          
           <ProtectedRoute>
             <DashboardLayout />
           </ProtectedRoute>
+          
         }
+        
       >
         <Route path="dashboard" element={<Dashboard />} />
         
@@ -76,7 +81,10 @@ function App() {
         <Route path="students/new" element={<StudentForm />} />
         <Route path="students/:id" element={<StudentDetails />} />
         <Route path="students/edit/:id" element={<StudentForm />} />
-        
+         {/* ✅ Enrollment Routes */}
+  <Route path="enrollments/:id" element={<EnrollmentForm />} />
+  <Route path="enrollments/edit/:id" element={<EnrollmentForm />} />
+
         {/* Class Routes */}
         <Route path="classes" element={<Classes />} />
         <Route path="classes/new" element={<ClassForm />} />

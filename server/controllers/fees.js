@@ -1,5 +1,7 @@
+// controllers/fees.js
 const Fee = require('../models/Fee');
 const Student = require('../models/Student');
+const Enrollment = require('../models/Enrollment');
 
 // Create or update a fee record
 exports.upsertFee = async (req, res) => {
@@ -36,42 +38,93 @@ exports.getStudentFeesByYear = async (req, res) => {
   }
 };
 
-// Filter fees by month + status (e.g., "unpaid" for September)
+// Filter fees by month + status
 exports.getFeesByMonthStatus = async (req, res) => {
   try {
     const { schoolYear, month, status } = req.query;
 
     const fees = await Fee.find({ schoolYear, month: +month })
-      .populate('student', 'firstName lastName class');
+      .populate({
+        path: 'student',
+        select: 'firstName lastName class',
+        populate: { path: 'class', select: 'name' } // ✅ include class name
+      });
 
-    const filtered = fees.filter(fee => fee.status === status);
+    // optional: filter by status if your Fee model actually computes it
+    const filtered = status ? fees.filter(fee => fee.status === status) : fees;
     res.json(filtered);
   } catch (err) {
     res.status(500).json({ message: 'Failed to filter fees', error: err.message });
   }
 };
 
-// Get all unpaid/partial/paid students for a month
+// Get all students with their fees for a given school year/month
+// controllers/fees.js
 exports.getAllStudentsFees = async (req, res) => {
   try {
     const { schoolYear, month } = req.query;
-    const students = await Student.find();
+
+    if (!schoolYear) {
+      return res.status(400).json({ message: 'schoolYear is required' });
+    }
+
+    const students = await Student.find().lean();
     const result = [];
 
     for (let student of students) {
-      const fee = await Fee.findOne({ student: student._id, schoolYear, month });
+      // ✅ fetch enrollment for this student + schoolYear
+      const enrollment = await Enrollment.findOne({
+        student: student._id,
+        schoolYear
+      })
+        .populate('class', 'name')
+        .lean();
+
+      const fee = await Fee.findOne({
+        student: student._id,
+        schoolYear,
+        ...(month ? { month } : {})
+      }).lean();
+
+      let totalDue = 0;
+      let totalPaid = 0;
+      let status = 'unpaid';
+
+      if (fee && fee.items) {
+        totalDue = fee.items.reduce((sum, i) => sum + (i.due || 0), 0);
+        totalPaid = fee.items.reduce((sum, i) => sum + (i.paid || 0), 0);
+
+        if (totalPaid >= totalDue && totalDue > 0) {
+          status = 'paid';
+        } else if (totalPaid > 0) {
+          status = 'partial';
+        } else {
+          status = 'unpaid';
+        }
+      }
 
       result.push({
-        student,
+        student: {
+          _id: student._id,
+          firstName: student.firstName,
+          lastName: student.lastName,
+          studentId: student.studentId,
+          profilePhoto: student.profilePhoto,
+          // ✅ now class comes from enrollment
+          class: enrollment?.class
+            ? { _id: enrollment.class._id, name: enrollment.class.name }
+            : null
+        },
         fee: fee || null,
-        status: fee ? fee.status : 'unpaid',
-        totalDue: fee ? fee.totalDue : 0,
-        totalPaid: fee ? fee.totalPaid : 0
+        status,
+        totalDue,
+        totalPaid
       });
     }
 
     res.json(result);
   } catch (err) {
+    console.error('❌ getAllStudentsFees failed:', err);
     res.status(500).json({ message: 'Failed to fetch all student fees', error: err.message });
   }
 };

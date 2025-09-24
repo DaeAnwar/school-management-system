@@ -36,6 +36,7 @@ interface Student {
   }[];
   profilePhoto: string;
   enrollmentDate: string;
+  enrolled?: boolean; // ✅ ADD THIS LINE
 }
 
 interface Class {
@@ -97,7 +98,7 @@ useEffect(() => {
         if (searchTerm) params.search = searchTerm;
         if (selectedClass) params.class = selectedClass;
         if (selectedClub) params.clubs = selectedClub;
-        if (transportFilter) params.hasTransport = transportFilter === 'yes';
+if (transportFilter) params.transport = transportFilter; // 'yes' | 'no'
         
         const res = await api.get('/api/students', { params });
         
@@ -129,7 +130,7 @@ setSchoolYears(yearsRes.data.data || []);
 
     fetchStudents();
     fetchFilters();
-  }, [currentPage, searchTerm, selectedClass, selectedClub, transportFilter]);
+ }, [currentPage, searchTerm, selectedClass, selectedClub, transportFilter, selectedSchoolYear]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -211,9 +212,14 @@ setSchoolYears(yearsRes.data.data || []);
     className="form-input"
     value={selectedSchoolYear}
     onChange={(e) => {
-      setSelectedSchoolYear(e.target.value);
-      setCurrentPage(1);
-    }}
+    const y = e.target.value;
+    setSelectedSchoolYear(y);
++   // ✅ Reset dependent filters when year changes
++   setSelectedClass('');
++   setSelectedClub('');
++   setTransportFilter('');
+    setCurrentPage(1);
+  }}
   >
     <option value="">All Years</option>
     {schoolYears.map((year) => (
@@ -378,8 +384,16 @@ setSchoolYears(yearsRes.data.data || []);
 </td>
                     <td>{student.gender}</td>
                     <td>{student.age}</td>
-                    <td>{student.class?.name || 'N/A'}</td>
-                    <td>
+<td>
+  {student.class?.name ? (
+    <>
+      {student.class.name}
+      <span className="ml-2 badge badge-success">Complete</span>
+    </>
+  ) : (
+    <span className="badge badge-danger">Incomplete</span>
+  )}
+</td>                    <td>
                       {student.hasTransport ? (
                         <span className="badge badge-success">Yes</span>
                       ) : (
@@ -405,6 +419,14 @@ setSchoolYears(yearsRes.data.data || []);
                         >
                           <Edit className="h-4 w-4" />
                         </Link>
+                        {!student.enrolled && (
+  <Link
+    to={`/enrollments/${student._id}`}
+    className="btn btn-sm btn-outline"
+  >
+    Enroll
+  </Link>
+)}
                         <button
                           onClick={() => showQRCode(student)}
                           className="p-1 text-gray-500 hover:text-accent-600"

@@ -296,9 +296,9 @@ const Dashboard = () => {
                   y: {
                     beginAtZero: true,
                     ticks: {
-                      callback: function(value) {
-                        return '$' + value;
-                      }
+  callback: function(value) {
+    return value + ' TND';
+  }
                     }
                   }
                 },
@@ -309,8 +309,7 @@ const Dashboard = () => {
                   tooltip: {
                     callbacks: {
                       label: function(context) {
-                        return '$ ' + context.parsed.y;
-                      }
+ return context.parsed.y + ' TND';                      }
                     }
                   }
                 }

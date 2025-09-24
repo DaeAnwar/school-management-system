@@ -69,27 +69,38 @@ const StudentForm = () => {
 
     // If editing, fetch student data
     if (id) {
-      const fetchStudent = async () => {
-        try {
-          const res = await api.get(`/api/students/${id}`);
-          const student = res.data.data;
-          
-          setFormData({
-            ...student,
-            dateOfBirth: new Date(student.dateOfBirth),
-            clubs: student.clubs.map((club: any) => club._id)
-          });
-          
-          if (student.profilePhoto !== 'default.jpg') {
-            setPreviewUrl(`/uploads/${student.profilePhoto}`);
-          }
-        } catch (err) {
-          setError('Failed to load student data');
-        }
-      };
+  const fetchStudent = async () => {
+    try {
+      const res = await api.get(`/api/students/${id}`);
+      const student = res.data.data;
 
-      fetchStudent();
+      setFormData({
+        ...formData, // keep defaults for clubs, class, transport
+        firstName: student.firstName || '',
+        lastName: student.lastName || '',
+        gender: student.gender || 'Male',
+        dateOfBirth: new Date(student.dateOfBirth),
+        fatherName: student.fatherName || '',
+        fatherPhone: student.fatherPhone || '',
+        motherName: student.motherName || '',
+        motherPhone: student.motherPhone || '',
+        address1: student.address1 || '',
+        address2: student.address2 || '',
+        otherContact: student.otherContact || '',
+        profilePhoto: student.profilePhoto || 'default.jpg',
+        clubs: [] // ✅ leave empty, handled by enrollment
+      });
+
+      if (student.profilePhoto && student.profilePhoto !== 'default.jpg') {
+        setPreviewUrl(`/uploads/${student.profilePhoto}`);
+      }
+    } catch (err) {
+      setError('Failed to load student data');
     }
+  };
+
+  fetchStudent();
+}
   }, [id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -119,18 +130,22 @@ const StudentForm = () => {
         profilePhoto: photoFilename
       };
       
-      if (id) {
-        await api.put(`/api/students/${id}`, studentData);
-        setSuccess('Student updated successfully');
-      } else {
-        await api.post('/api/students', studentData);
-        setSuccess('Student created successfully');
-      }
+    if (id) {
+  await api.put(`/api/students/${id}`, studentData);
+  setSuccess('Student updated successfully');
+  setTimeout(() => {
+    navigate('/students');
+  }, 2000);
+} else {
+  const res = await api.post('/api/students', studentData);
+  setSuccess('Student created successfully');
+  const newStudentId = res.data.data._id;
+  setTimeout(() => {
+    navigate(`/enrollments/${newStudentId}`);
+  }, 1500);
+}
       
-      // Redirect after short delay
-      setTimeout(() => {
-        navigate('/students');
-      }, 2000);
+     
     } catch (err: any) {
       setError(
         err.response?.data?.error || 'Failed to save student'
@@ -259,72 +274,11 @@ const StudentForm = () => {
               />
             </div>
             
-            <div>
-              <label htmlFor="class" className="form-label">
-                Class
-              </label>
-              <select
-                id="class"
-                className="form-input"
-                value={formData.class}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  class: e.target.value
-                })}
-                required
-              >
-                <option value="">Select Class</option>
-                {classes.map(cls => (
-                  <option key={cls._id} value={cls._id}>
-                    {cls.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+           
             
-            <div>
-              <label className="form-label">Clubs</label>
-              <div className="space-y-2">
-                {clubs.map(club => (
-                  <label key={club._id} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      className="form-checkbox h-4 w-4 text-primary-600"
-                      checked={formData.clubs.includes(club._id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setFormData({
-                            ...formData,
-                            clubs: [...formData.clubs, club._id]
-                          });
-                        } else {
-                          setFormData({
-                            ...formData,
-                            clubs: formData.clubs.filter(id => id !== club._id)
-                          });
-                        }
-                      }}
-                    />
-                    <span className="ml-2">{club.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
             
-            <div>
-              <label className="form-label flex items-center">
-                <input
-                  type="checkbox"
-                  className="form-checkbox h-4 w-4 text-primary-600"
-                  checked={formData.hasTransport}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    hasTransport: e.target.checked
-                  })}
-                />
-                <span className="ml-2">Uses School Transport</span>
-              </label>
-            </div>
+            
+            
             
             <div>
               <label className="form-label">Profile Photo</label>

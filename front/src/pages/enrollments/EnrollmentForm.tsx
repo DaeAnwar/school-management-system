@@ -47,7 +47,12 @@ const EnrollmentForm = () => {
     return now.getMonth() + 1 >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
   };
 
-  useEffect(() => {
+  useEffect(() => {const currentYear = getCurrentSchoolYear();
+setFormData(prev => ({
+  ...prev,
+  student: studentId || '',
+  schoolYear: currentYear
+}));
     const fetchData = async () => {
       try {
         const [studentRes, classRes, clubRes, yearRes] = await Promise.all([
@@ -63,31 +68,41 @@ const EnrollmentForm = () => {
         const years = yearRes.data.data || [];
         setSchoolYears(years);
 
-        const currentYear = getCurrentSchoolYear();
+        
 
-        setFormData(prev => ({
-          ...prev,
-          schoolYear: currentYear
-        }));
+       if (studentId) {
+  try {
+  const enrollmentRes = await api.get('/api/enrollments/single', {
+    params: {
+      student: studentId,
+      schoolYear: currentYear
+    }
+  });
 
-        if (studentId) {
-          const enrollmentRes = await api.get('/api/enrollments/single', {
-            params: {
-              student: studentId,
-              schoolYear: currentYear
-            }
-          });
+  const enrollment = enrollmentRes.data.data;
 
-          const enrollment = enrollmentRes.data.data;
+  setFormData({
+  student: enrollment.student?._id || studentId,   // ✅ fallback if ._id missing
+  schoolYear: enrollment.schoolYear,
+  class: enrollment.class?._id || '',
+  clubs: (enrollment.clubs || []).map((c: any) => c._id),
+  hasTransport: enrollment.hasTransport
+});
+} catch (err: any) {
+  if (err.response?.status === 404) {
+    // Normal case: no enrollment yet, so prefill student & year
+    setFormData(prev => ({
+      ...prev,
+      student: studentId,
+      schoolYear: currentYear
+    }));
+  } else {
+    setError('Failed to load data');
+  }
+}
 
-          setFormData({
-            student: enrollment.student._id,
-            schoolYear: enrollment.schoolYear,
-            class: enrollment.class?._id || '',
-            clubs: enrollment.clubs.map((c: any) => c._id),
-            hasTransport: enrollment.hasTransport
-          });
-        }
+}
+
       } catch {
         setError('Failed to load data');
       }
@@ -96,22 +111,34 @@ const EnrollmentForm = () => {
     fetchData();
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    setSuccess('');
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setLoading(true);
+  setError('');
+  setSuccess('');
 
-    try {
-      await api.post('/api/enrollments', formData);
-      setSuccess('Enrollment saved successfully!');
-      setTimeout(() => navigate('/students'), 2000);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to save enrollment');
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    const payload = {
+      student: formData.student,
+      schoolYear: formData.schoolYear,
+      class: formData.class || undefined,
+      clubs: formData.clubs || [],
+      hasTransport: formData.hasTransport
+    };
+
+    console.log("📤 Submitting enrollment payload:", payload); // 👈 add this
+
+    await api.post('/api/enrollments', payload);
+
+    setSuccess('Enrollment saved successfully!');
+    setTimeout(() => navigate('/students'), 2000);
+  } catch (err: any) {
+    console.error("❌ Enrollment save error:", err.response?.data); // 👈 add this
+    setError(err.response?.data?.error || 'Failed to save enrollment');
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -123,6 +150,7 @@ const EnrollmentForm = () => {
       {success && <Alert type="success" message={success} onClose={() => setSuccess('')} />}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        
         <div>
           <label className="form-label">Student</label>
           <select
@@ -136,6 +164,7 @@ const EnrollmentForm = () => {
             {students.map((s) => (
               <option key={s._id} value={s._id}>
                 {s.firstName} {s.lastName} ({s.studentId})
+                
               </option>
             ))}
           </select>

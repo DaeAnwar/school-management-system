@@ -85,19 +85,22 @@ const fetchStudent = async () => {
     const studentData = res.data.data;
 
     // Fetch enrollment for current year
-    const enrollmentRes = await api.get('/api/enrollments/single', {
-      params: {
-        student: id,
-        schoolYear: getCurrentSchoolYear()
-      }
-    });
+   try {
+  const enrollmentRes = await api.get('/api/enrollments/single', {
+    params: { student: id, schoolYear: getCurrentSchoolYear() }
+  });
 
-    const enrollment = enrollmentRes.data.data;
+  const enrollment = enrollmentRes.data.data;
 
-    // Override student fields from enrollment
-    studentData.class = enrollment.class;
-    studentData.clubs = enrollment.clubs;
-    studentData.hasTransport = enrollment.hasTransport;
+  studentData.class = enrollment.class;
+  studentData.clubs = enrollment.clubs;
+  studentData.hasTransport = enrollment.hasTransport;
+} catch (err) {
+  // Enrollment not found, use defaults
+  studentData.class = { _id: '', name: 'N/A' };
+  studentData.clubs = [];
+  studentData.hasTransport = false;
+}
 
     setStudent(studentData);
   } catch (err) {
@@ -178,7 +181,7 @@ fetchStudent();
   </Link>
 
   <Link
-    to={`/enrollments/edit/${student._id}`}
+  to={`/enrollments/${student._id}`}
     className="btn btn-outline flex items-center"
   >
     <GraduationCap className="h-4 w-4 mr-1" />

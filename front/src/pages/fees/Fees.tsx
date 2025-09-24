@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import axios from 'axios';
+import api from '../../utils/api';
 import FeeTable from './FeeTable';
 
 interface StudentInfo {
@@ -41,25 +41,25 @@ const Fees = () => {
   });
 
   useEffect(() => {
-    axios.get('/api/fees/school-years').then(res => {
-      setSchoolYears(res.data.data);
-    });
-  }, []);
+  api.get('/api/fees/school-years').then(res => {
+    setSchoolYears(res.data.data);
+  });
+}, []);
 
-  const loadData = async () => {
-    try {
-      const res = await axios.get('/api/fees', {
-        params: {
-          schoolYear: filters.schoolYear || undefined,
-          month: filters.month || undefined,
-          status: filters.status || undefined,
-        },
-      });
-      setFeeData(res.data);
-    } catch (err) {
-      console.error('Failed to fetch fee data:', err);
-    }
-  };
+const loadData = async () => {
+  try {
+    const res = await api.get('/api/fees', {
+      params: {
+        schoolYear: filters.schoolYear || undefined,
+        month: filters.month || undefined,
+        status: filters.status || undefined,
+      },
+    });
+    setFeeData(res.data);
+  } catch (err) {
+    console.error('Failed to fetch fee data:', err);
+  }
+};
 
   useEffect(() => {
     loadData();
